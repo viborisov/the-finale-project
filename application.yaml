@@ -2,12 +2,15 @@
 
 indexing-settings:
   sites:
-    - url: https://www.lenta.ru
-      name: Лента.ру
-    - url: https://www.skillbox.ru
-      name: Skillbox
-    - url: https://www.playback.ru
-      name: PlayBack.Ru
+    - url: "https://sendel.ru"
+      name: sendel
+    - url: "https://obuv-tut2000.ru/"
+      name: obuvtyt
+
+#parser-settings:
+#  agent:
+#    agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+#    referrer: "https://www.google.com"
 
 server:
   port: 8080

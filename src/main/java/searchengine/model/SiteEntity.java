@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,7 +17,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "site")
+@Table(name = "sites")
 public class SiteEntity {
 
     @Id
@@ -28,6 +29,7 @@ public class SiteEntity {
     @Column(name = "status", columnDefinition = "ENUM('INDEXING', 'INDEXED', 'FAILED')", nullable = false)
     private Status status;
 
+    @CreationTimestamp
     @Column(name = "status_time", nullable = false)
     private LocalDateTime statusTime;
 
