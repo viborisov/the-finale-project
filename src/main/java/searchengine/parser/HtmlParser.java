@@ -5,19 +5,20 @@ import org.jsoup.Connection.Response;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import searchengine.config.Http;
 import searchengine.exceptions.ReadingException;
 import searchengine.exceptions.ThreadException;
 import searchengine.model.PageEntity;
 import searchengine.model.SiteEntity;
 import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
+import searchengine.services.IndexingServiceImpl;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.RecursiveTask;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class HtmlParser extends RecursiveTask<Set<PageEntity>> {
@@ -26,79 +27,90 @@ public class HtmlParser extends RecursiveTask<Set<PageEntity>> {
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
     private final Set<String> visitedUrl;
-    private final AtomicBoolean stopRequested;
-    public HtmlParser(String url, PageRepository pageRepository, SiteRepository siteRepository, Set<String> visitedUrl, AtomicBoolean stopRequested) {
+    private final Http http;
 
+    public HtmlParser(String url, PageRepository pageRepository, SiteRepository siteRepository, Set<String> visitedUrl, Http http) {
         this.url = url;
         this.pageRepository = pageRepository;
         this.siteRepository = siteRepository;
         this.visitedUrl = visitedUrl;
-        this.stopRequested = stopRequested;
+        this.http = http;
     }
 
     public Response getHtml(String url) {
         checkInterrupted();
         try {
-            Thread.sleep(1500);
+            if (IndexingServiceImpl.stopRequested.get() || Thread.currentThread().isInterrupted()) {
+                throw new ThreadException("Индексация прервана пользователем");
+            }
             return Jsoup.connect(url)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    .referrer("https://www.google.com")
-                    .timeout(1500)
+                    .userAgent(http.getUserAgent())
+                    .referrer(http.getReferrer())
+                    .timeout(http.getTimeout())
                     .execute();
         } catch (IOException ex) {
             throw new ReadingException("Ошибка загрузки страницы: " + url);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new ThreadException("Индексация прервана пользователем");
         }
     }
 
     @Override
     protected Set<PageEntity> compute() {
+
         checkInterrupted();
         Set<PageEntity> pageEntities = new HashSet<>();
-        String path = getPath(url);
 
-        if (!visitedUrl.add(path)) {
-            return pageEntities;
-        }
+        while (!IndexingServiceImpl.stopRequested.get()) {
+            String path = getPath(url);
 
-        Elements elements;
-        Response response = getHtml(url);
-        checkInterrupted();
-        String html = response.body();
-        ArrayList<HtmlParser> taskList = new ArrayList<>();
-
-        try {
-            elements = response.parse().select("a[href]");
-        } catch (IOException e) {
-            throw new ReadingException("Не могу прочитать страницу");
-        }
-
-        for (Element link : elements) {
-            checkInterrupted();
-            String href = link.attr("href").trim();
-            if (isRelativeLink(href)) {
-                if (visitedUrl.add(href)) {
-                    PageEntity page = createPage(href, response, html);
-                    pageEntities.add(page);
-                }
-                checkInterrupted();
-                String absUrl = link.absUrl("href");
-                HtmlParser parser = new HtmlParser(absUrl, pageRepository, siteRepository, visitedUrl, stopRequested);
-                parser.fork();
-                taskList.add(parser);
+            if (!visitedUrl.add(path)) {
+                return pageEntities;
             }
-        }
-        for (HtmlParser task : taskList) {
             checkInterrupted();
-            pageEntities.addAll(task.join());
+
+            Response response = getHtml(url);
+            checkInterrupted();
+
+            String html = response.body();
+            ArrayList<HtmlParser> taskList = new ArrayList<>();
+
+            Elements elements;
+            try {
+                checkInterrupted();
+                elements = response.parse().select("a[href]");
+            } catch (IOException e) {
+                throw new ReadingException("Не могу прочитать страницу");
+            }
+
+            for (Element link : elements) {
+
+                checkInterrupted();
+                String href = link.attr("href").trim();
+
+                if (isRelativeLink(href)) {
+                    if (visitedUrl.add(href)) {
+                        PageEntity page = createPage(href, response, html);
+                        pageEntities.add(page);
+                    }
+
+                    String absUrl = link.absUrl("href");
+                    if (absUrl.isEmpty()) continue;
+
+                    HtmlParser parser = new HtmlParser(absUrl, pageRepository, siteRepository, visitedUrl, http);
+                    parser.fork();
+                    taskList.add(parser);
+                }
+            }
+            for (HtmlParser task : taskList) {
+                checkInterrupted();
+                pageEntities.addAll(task.join());
+            }
+            break;
         }
         return pageEntities;
     }
 
     public void checkInterrupted() {
-        if (stopRequested.get() || Thread.currentThread().isInterrupted()) {
+        if (IndexingServiceImpl.stopRequested.get() || Thread.currentThread().isInterrupted()) {
            throw new ThreadException("Индексация прервана пользователем");
         }
     }

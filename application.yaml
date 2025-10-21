@@ -1,12 +1,18 @@
 # example values
 
-indexing-settings:
+indexing:
+ settings:
   sites:
-    - url: "https://sendel.ru"
-      name: sendel
-    - url: "https://obuv-tut2000.ru/"
-      name: obuvtyt
-
+   - url: "http://www.playback.ru/"
+     name: playback
+   - url: "https://ipfran.ru/"
+     name: ipfran
+   - url: "https://dimonvideo.ru/"
+     name: dimonvideo
+ http:
+   user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+   referrer: "https://www.google.com"
+   timeout: 1500
 #parser-settings:
 #  agent:
 #    agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -14,6 +20,8 @@ indexing-settings:
 
 server:
   port: 8080
+  tomcat:
+    connection-timeout: 30s
 
 spring:
   datasource:
@@ -22,7 +30,7 @@ spring:
     url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: update
     show-sql: true
     properties:
       hibernate:

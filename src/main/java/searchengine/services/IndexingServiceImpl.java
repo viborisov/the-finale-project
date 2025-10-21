@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import searchengine.config.Http;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.dto.statistics.IndexingResponse;
@@ -33,8 +34,9 @@ public class IndexingServiceImpl implements IndexingService {
     private final SitesList sitesList;
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
+    private final Http http;
     private final AtomicBoolean isIndexing = new AtomicBoolean(false);
-    private final AtomicBoolean stopRequested = new AtomicBoolean(false);
+    public static AtomicBoolean stopRequested = new AtomicBoolean(false);
     private volatile ExecutorService executorService;
     private volatile ForkJoinPool forkJoinPool;
 
@@ -50,8 +52,10 @@ public class IndexingServiceImpl implements IndexingService {
             return response;
         }
 
+        shutdownExecutors();
         stopRequested.set(false);
         response.setResult(true);
+        log.info("Запуск индексации");
 
         List<Site> sites = sitesList.getSites();
         List<String> urls = sites.stream().map(Site::getUrl).toList();
@@ -59,7 +63,7 @@ public class IndexingServiceImpl implements IndexingService {
         pageRepository.deletePageBySiteId(siteRepository.findByUrlSiteId(urls));
         siteRepository.deleteByUrls(urls);
 
-        executorService = Executors.newFixedThreadPool(3);
+        executorService = Executors.newFixedThreadPool(4);
         forkJoinPool = new ForkJoinPool();
 
         executorService.execute(() -> {
@@ -72,9 +76,10 @@ public class IndexingServiceImpl implements IndexingService {
                         }, executorService))
                                 .toList();
                 CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-                isIndexing.set(false);
+                log.info("Индексация завершена");
             } catch (Exception e) {
-                shutdownExecutors();
+                log.error("Ошибка во время индексации");
+            } finally {
                 isIndexing.set(false);
             }
         });
@@ -90,9 +95,20 @@ public class IndexingServiceImpl implements IndexingService {
             return response;
         }
         stopRequested.set(true);
-        response.setResult(true);
+        log.warn("Запрошена остановка индексации");
         shutdownExecutors();
+
+        siteRepository.findAll().forEach(site -> {
+            if (site.getStatus() == Status.INDEXING) {
+                site.setStatus(Status.FAILED);
+                site.setLastError("Индексация прервана пользователем");
+                site.setStatusTime(LocalDateTime.now());
+                siteRepository.save(site);
+            }
+        });
+        response.setResult(true);
         isIndexing.set(false);
+        log.info("Индексация успешно остановлена");
         return response;
     }
 
@@ -110,7 +126,8 @@ public class IndexingServiceImpl implements IndexingService {
         SiteEntity site = siteRepository.findSiteByUrl(url);
         Set<String> visitedUrl = ConcurrentHashMap.newKeySet();
         try {
-            Set<PageEntity> pages = forkJoinPool.invoke(new HtmlParser(url, pageRepository, siteRepository, visitedUrl, stopRequested));
+            checkStopped();
+            Set<PageEntity> pages = forkJoinPool.invoke(new HtmlParser(url, pageRepository, siteRepository, visitedUrl, http));
             savePagesBatch(pages.stream().toList(), 50);
             site.setStatus(Status.INDEXED);
         } catch (ReadingException | ThreadException e) {
@@ -123,6 +140,11 @@ public class IndexingServiceImpl implements IndexingService {
         }
     }
 
+    private void checkStopped() {
+        if (stopRequested.get() || Thread.currentThread().isInterrupted()) {
+            throw new ThreadException("Индексация прервана пользователем");
+        }
+    }
 
     public void savePagesBatch(List<PageEntity> pageEntities, int batchSize) {
         List<PageEntity> batchList = new ArrayList<>(pageEntities);
@@ -137,15 +159,27 @@ public class IndexingServiceImpl implements IndexingService {
                 log.error("Одна или несколько страниц в батче уже сохранены");
             }
             pageRepository.flush();
+            checkStopped();
         }
     }
 
     public void shutdownExecutors() {
-        if (executorService != null && !executorService.isShutdown()) {
-            executorService.shutdownNow();
-        }
-        if (forkJoinPool != null && !forkJoinPool.isShutdown()) {
-            forkJoinPool.shutdownNow();
+        try {
+            if (executorService != null && !executorService.isShutdown()) {
+                executorService.shutdownNow();
+                if (!executorService.awaitTermination(2, TimeUnit.SECONDS)) {
+                    log.warn("executorService не завершился вовремя");
+                }
+            }
+            if (forkJoinPool != null && !forkJoinPool.isShutdown()) {
+                forkJoinPool.shutdownNow();
+                if (!forkJoinPool.awaitTermination(3, TimeUnit.SECONDS)) {
+                    log.warn("forkJoinPool не завершился вовремя");
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Ожидание завершения потоков прервано");
         }
     }
 }
