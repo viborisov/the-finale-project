@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import searchengine.model.SiteEntity;
 
 import java.util.List;
+import java.util.Optional;
 
 
 @Repository
@@ -20,6 +21,7 @@ public interface SiteRepository extends JpaRepository<SiteEntity, Integer> {
     @Query("SELECT s.id FROM SiteEntity s WHERE s.url IN :urls")
     List<Integer> findByUrlSiteId(@Param("urls") List<String> urls);
 
+    Optional<SiteEntity> findSiteByUrl(String url);
 
-    SiteEntity findSiteByUrl(String url);
+    SiteEntity findSiteById(Integer id);
 }

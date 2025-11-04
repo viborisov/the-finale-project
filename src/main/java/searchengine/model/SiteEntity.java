@@ -2,7 +2,6 @@ package searchengine.model;
 
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -15,7 +14,6 @@ import java.util.List;
 @Setter
 @Getter
 @NoArgsConstructor
-@AllArgsConstructor
 @Entity
 @Table(name = "sites")
 public class SiteEntity {
@@ -44,4 +42,7 @@ public class SiteEntity {
 
     @OneToMany(mappedBy = "site", fetch = FetchType.LAZY)
     private List<PageEntity> pages;
+
+    @OneToMany(mappedBy = "site", fetch = FetchType.LAZY)
+    private List<LemmaEntity> lemmas;
 }

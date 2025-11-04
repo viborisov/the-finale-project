@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.List;
+
 @Setter
 @Getter
 @NoArgsConstructor
@@ -33,4 +35,7 @@ public class PageEntity {
 
     @Column(name = "content", columnDefinition = "MEDIUMTEXT", nullable = false)
     private String content;
+
+    @OneToMany(mappedBy = "page", fetch = FetchType.LAZY)
+    private List<IndexEntity> index;
 }

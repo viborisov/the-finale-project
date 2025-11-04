@@ -7,8 +7,6 @@ indexing:
      name: playback
    - url: "https://ipfran.ru/"
      name: ipfran
-   - url: "https://dimonvideo.ru/"
-     name: dimonvideo
  http:
    user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
    referrer: "https://www.google.com"
@@ -30,7 +28,7 @@ spring:
     url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: create
     show-sql: true
     properties:
       hibernate:

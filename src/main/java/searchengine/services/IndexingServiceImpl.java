@@ -2,6 +2,7 @@ package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Connection;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,17 +12,18 @@ import searchengine.config.SitesList;
 import searchengine.dto.statistics.IndexingResponse;
 import searchengine.exceptions.ReadingException;
 import searchengine.exceptions.ThreadException;
-import searchengine.model.PageEntity;
-import searchengine.model.SiteEntity;
-import searchengine.model.Status;
+import searchengine.model.*;
 import searchengine.parser.HtmlParser;
+import searchengine.parser.LemmaFinder;
+import searchengine.repository.IndexRepository;
+import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -34,12 +36,14 @@ public class IndexingServiceImpl implements IndexingService {
     private final SitesList sitesList;
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
+    private final IndexRepository indexRepository;
+    private final LemmaRepository lemmaRepository;
     private final Http http;
+    private final LemmaFinder lemmaFinder;
     private final AtomicBoolean isIndexing = new AtomicBoolean(false);
     public static AtomicBoolean stopRequested = new AtomicBoolean(false);
     private volatile ExecutorService executorService;
     private volatile ForkJoinPool forkJoinPool;
-
 
     @Override
     public IndexingResponse startIndexing() {
@@ -72,7 +76,7 @@ public class IndexingServiceImpl implements IndexingService {
                         .map(site -> CompletableFuture.runAsync(() -> {
                             log.info("Началась индексация сайта {}", site.getUrl());
                             createSite(site.getUrl(), site.getName());
-                            indexPage(site.getUrl());
+                            indexingPage(site.getUrl());
                         }, executorService))
                                 .toList();
                 CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
@@ -112,18 +116,151 @@ public class IndexingServiceImpl implements IndexingService {
         return response;
     }
 
+    @Override
+    public IndexingResponse indexPage(String url) {
+        IndexingResponse indexingResponse = new IndexingResponse();
 
-    public void createSite(String url, String name) {
+        if (!checkSiteUrl(url)) {
+            indexingResponse.setResult(false);
+            indexingResponse.setError("\"Данная страница находится за пределами сайтов,\n" +
+                    " указанных в конфигурационном файле");
+            return indexingResponse;
+        }
+
+        log.info("индексация и сбор лемм страницы {} началась", url);
+        SiteEntity currentSite = findOrCreateSiteByUrl(url);
+        PageEntity currentPage = getPageByUrl(url, currentSite);
+        if (currentPage != null) {
+            deletePageInfo(currentPage);
+            log.info("Отчистили таблицы lemma, index, page");
+        }
+
+        Connection.Response response = lemmaFinder.getResponse(url);
+        String currentHtml = response.body();
+        Integer statusCode = response.statusCode();
+
+        PageEntity pageEntity = new PageEntity();
+        pageEntity.setSite(currentSite);
+        pageEntity.setPath(getUrl(url).getPath());
+        pageEntity.setCode(statusCode);
+        pageEntity.setContent(currentHtml);
+        pageRepository.save(pageEntity);
+
+        HashMap<String, Float> lemmaOnePage = lemmaFinder.collectLemmas(url);
+        for (Map.Entry<String, Float> entry : lemmaOnePage.entrySet()) {
+            String textLemma = entry.getKey();
+            Float rank = entry.getValue();
+
+            LemmaEntity lemmaEntity = createLemma(textLemma, currentSite);
+            createIndex(lemmaEntity, pageEntity, rank);
+        }
+        log.info("Индексация страницы {} завершена", url);
+        indexingResponse.setResult(true);
+        return indexingResponse;
+    }
+
+    @Override
+    public IndexingResponse deleteAllDataInBD() {
+        indexRepository.deleteAll();
+        lemmaRepository.deleteAll();
+        pageRepository.deleteAll();
+        siteRepository.deleteAll();
+        stopRequested.set(false);
+        isIndexing.set(false);
+        IndexingResponse indexingResponse = new IndexingResponse();
+        indexingResponse.setResult(true);
+        return indexingResponse;
+    }
+
+    @Transactional
+    private void deletePageInfo(PageEntity page) {
+        List<IndexEntity> indexes = indexRepository.findAllIndexByPageId(page.getId());
+        for (IndexEntity index : indexes) {
+            LemmaEntity lemmaEntity = index.getLemma();
+            lemmaEntity.setFrequency(lemmaEntity.getFrequency() - 1);
+            if (lemmaEntity.getFrequency() <= 0) {
+                lemmaRepository.delete(lemmaEntity);
+            } else {
+                lemmaRepository.save(lemmaEntity);
+            }
+        }
+        indexRepository.deleteAll(indexes);
+        pageRepository.delete(page);
+    }
+
+    private SiteEntity findOrCreateSiteByUrl(String url) {
+        String domain = getUrl(url).getHost();
+        String protocol = getUrl(url).getProtocol();
+        return siteRepository.findSiteByUrl(protocol + "://" + domain)
+                .orElseGet(() -> {
+                    SiteEntity site = new SiteEntity();
+                    site.setUrl(protocol + "://" + domain);
+                    site.setName(domain);
+                    site.setStatus(Status.INDEXED);
+                    site.setLastError("");
+                    site.setStatusTime(LocalDateTime.now());
+                    siteRepository.save(site);
+                    return site;
+                });
+    }
+
+    private LemmaEntity createLemma(String textLemma, SiteEntity currentSite) {
+        LemmaEntity lemmaEntity = lemmaRepository.findLemmaByLemmaAndSite(textLemma, currentSite)
+                .orElseGet(() -> {
+                    LemmaEntity newLemma = new LemmaEntity();
+                    newLemma.setSite(currentSite);
+                    newLemma.setLemma(textLemma);
+                    newLemma.setFrequency(0);
+                    lemmaRepository.save(newLemma);
+                    return newLemma;
+                });
+        lemmaEntity.setFrequency(lemmaEntity.getFrequency() + 1);
+        lemmaRepository.save(lemmaEntity);
+        return lemmaEntity;
+    }
+
+    private void createIndex(LemmaEntity lemma, PageEntity page, Float rank) {
+        IndexEntity indexEntity = new IndexEntity();
+        indexEntity.setLemma(lemma);
+        indexEntity.setPage(page);
+        indexEntity.setRank(rank);
+        indexRepository.save(indexEntity);
+    }
+
+    private URL getUrl(String url) {
+        URL currentUrl = null;
+        try {
+            currentUrl = new URL(url);
+        } catch (MalformedURLException e) {
+            System.err.println("Некорректный URL: " + e.getMessage());
+        }
+        return currentUrl;
+    }
+
+    private boolean checkSiteUrl(String url) {
+        String domain = getUrl(url).getProtocol();
+        return sitesList.getSites().stream()
+                .map(Site::getUrl)
+                .anyMatch(urls ->urls.contains(domain));
+    }
+
+    private PageEntity getPageByUrl(String url,SiteEntity site) {
+        String path = getUrl(url).getPath();
+        return pageRepository.findPageByPathAndSite(path, site);
+    }
+
+    private SiteEntity createSite(String url, String name) {
         SiteEntity siteEntity = new SiteEntity();
         siteEntity.setStatus(Status.INDEXING);
         siteEntity.setLastError("");
         siteEntity.setUrl(url);
         siteEntity.setName(name);
         siteRepository.save(siteEntity);
+        return siteEntity;
     }
 
-    private void indexPage(String url) {
-        SiteEntity site = siteRepository.findSiteByUrl(url);
+    private void indexingPage(String url) {
+        SiteEntity site = siteRepository.findSiteByUrl(url).get();
         Set<String> visitedUrl = ConcurrentHashMap.newKeySet();
         try {
             checkStopped();
@@ -146,7 +283,7 @@ public class IndexingServiceImpl implements IndexingService {
         }
     }
 
-    public void savePagesBatch(List<PageEntity> pageEntities, int batchSize) {
+    private void savePagesBatch(List<PageEntity> pageEntities, int batchSize) {
         List<PageEntity> batchList = new ArrayList<>(pageEntities);
         int total = batchList.size();
 
@@ -163,7 +300,7 @@ public class IndexingServiceImpl implements IndexingService {
         }
     }
 
-    public void shutdownExecutors() {
+    private void shutdownExecutors() {
         try {
             if (executorService != null && !executorService.isShutdown()) {
                 executorService.shutdownNow();

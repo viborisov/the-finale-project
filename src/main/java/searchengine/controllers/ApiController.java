@@ -2,22 +2,21 @@ package searchengine.controllers;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import searchengine.dto.statistics.IndexingResponse;
 import searchengine.dto.statistics.StatisticsResponse;
-import searchengine.services.IndexingService;
-import searchengine.services.StatisticsService;
+import searchengine.services.IndexingServiceImpl;
+import searchengine.services.StatisticsServiceImpl;
 
 @RestController
 @RequestMapping("/api")
 public class ApiController {
 
-    private final StatisticsService statisticsService;
-    private final IndexingService indexingService;
+    private final StatisticsServiceImpl statisticsService;
+    private final IndexingServiceImpl indexingService;
 
-    public ApiController(StatisticsService statisticsService, IndexingService indexingService) {
+    public ApiController(StatisticsServiceImpl statisticsService,
+                         IndexingServiceImpl indexingService) {
         this.statisticsService = statisticsService;
         this.indexingService = indexingService;
     }
@@ -35,5 +34,15 @@ public class ApiController {
     @GetMapping("/stopIndexing")
     public ResponseEntity<IndexingResponse> stopIndexing() {
         return ResponseEntity.status(HttpStatus.OK).body(indexingService.stopIndexing());
+    }
+
+    @PostMapping("/indexPage")
+    public ResponseEntity<IndexingResponse> indexPage(@RequestBody String url) {
+        return ResponseEntity.status(HttpStatus.OK).body(indexingService.indexPage(url));
+    }
+
+    @DeleteMapping()
+    public ResponseEntity<IndexingResponse> deleteAllDataInBD() {
+        return ResponseEntity.status(HttpStatus.OK).body(indexingService.deleteAllDataInBD());
     }
 }

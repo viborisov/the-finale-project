@@ -37,7 +37,7 @@ public class HtmlParser extends RecursiveTask<Set<PageEntity>> {
         this.http = http;
     }
 
-    public Response getHtml(String url) {
+    public Response getResponse(String url) {
         checkInterrupted();
         try {
             if (IndexingServiceImpl.stopRequested.get() || Thread.currentThread().isInterrupted()) {
@@ -67,7 +67,7 @@ public class HtmlParser extends RecursiveTask<Set<PageEntity>> {
             }
             checkInterrupted();
 
-            Response response = getHtml(url);
+            Response response = getResponse(url);
             checkInterrupted();
 
             String html = response.body();
@@ -138,7 +138,7 @@ public class HtmlParser extends RecursiveTask<Set<PageEntity>> {
         pageEntity.setPath(path);
         pageEntity.setCode(response.statusCode());
         pageEntity.setContent(html);
-        SiteEntity site = siteRepository.findSiteByUrl(url);
+        SiteEntity site = siteRepository.findSiteByUrl(url).get();
         pageEntity.setSite(site);
         return pageEntity;
     }

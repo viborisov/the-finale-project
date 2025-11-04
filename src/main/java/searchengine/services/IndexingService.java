@@ -5,4 +5,7 @@ import searchengine.dto.statistics.IndexingResponse;
 public interface IndexingService {
     IndexingResponse startIndexing();
     IndexingResponse stopIndexing();
+    IndexingResponse indexPage(String url);
+
+    IndexingResponse deleteAllDataInBD();
 }
