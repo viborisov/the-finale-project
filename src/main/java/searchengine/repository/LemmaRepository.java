@@ -1,12 +1,20 @@
 package searchengine.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import searchengine.model.LemmaEntity;
-import searchengine.model.SiteEntity;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface LemmaRepository extends JpaRepository<LemmaEntity, Integer> {
-    void deleteLemmaBySiteId(Integer siteId);
-    Optional<LemmaEntity> findLemmaByLemmaAndSite(String lemma, SiteEntity site);
+
+    @Modifying
+    @Query("DELETE FROM LemmaEntity l WHERE l.site.id IN :siteIds")
+    void deleteLemmaBySiteId(@Param("siteIds") List<Integer> siteIds);
+
+    @Query("SELECT l FROM LemmaEntity l WHERE l.lemma = :lemma AND l.site.id = :siteId")
+    Optional<LemmaEntity> findLemmaByLemmaAndSite(@Param("lemma") String lemma, @Param("siteId") Integer siteId);
 }

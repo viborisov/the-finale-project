@@ -21,13 +21,11 @@ import java.util.List;
 @RequiredArgsConstructor
 @Component
 public class LemmaFinder {
-
     private final LuceneMorphology luceneMorphology;
     private final String WORD_TYPE_REGEX = "\\W\\w&&[^а-яА-Я\\s]";
-    private final String[] particlesNames = new String[]{"МЕЖД", "ПРЕДЛ", "СОЮЗ"};
+    private final String[] particlesNames = {"ПРЕДЛ", "СОЮЗ", "МЕЖД", "ЧАСТ"};
 
-    public HashMap<String, Float> collectLemmas(String url) {
-        String html = clearText(getResponse(url).body());
+    public HashMap<String, Float> collectLemmas(String url, String html) {
         String[] words = arrayContainsRussianWords(html);
         HashMap<String, Float> lemmas = new HashMap<>();
 
@@ -57,22 +55,6 @@ public class LemmaFinder {
         return lemmas;
     }
 
-//    public Set<String> getLemmaSet (String url) {
-//        String[] textArray = arrayContainsRussianWords(url);
-//        Set<String> lemmaSet = new HashSet<>();
-//
-//        for (String word : textArray) {
-//            if (!word.isEmpty() && isCorrectWordForm(word)) {
-//                List<String> wordBaseForms = luceneMorphology.getMorphInfo(word);
-//                if (anyWordBaseBelongToParticle(wordBaseForms)) {
-//                    continue;
-//                }
-//                lemmaSet.addAll(luceneMorphology.getNormalForms(word));
-//            }
-//        }
-//        return lemmaSet;
-//    }
-
     private String[] arrayContainsRussianWords(String text) {
         return text.toLowerCase()
                 .replaceAll("[^а-я\\s]", "")
@@ -92,16 +74,6 @@ public class LemmaFinder {
         }
         return false;
     }
-
-//    private boolean isCorrectWordForm(String word) {
-//        List<String> wordInfo = luceneMorphology.getMorphInfo(word);
-//        for (String morphInfo : wordInfo) {
-//            if (morphInfo.matches(WORD_TYPE_REGEX)) {
-//                return false;
-//            }
-//        }
-//        return true;
-//    }
 
     private String clearText(String text) {
         if (text.isEmpty()) {

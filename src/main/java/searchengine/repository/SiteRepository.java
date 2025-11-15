@@ -16,12 +16,13 @@ public interface SiteRepository extends JpaRepository<SiteEntity, Integer> {
 
     @Modifying
     @Query("DELETE FROM SiteEntity s WHERE s.url IN :urls")
-    void deleteByUrls (@Param("urls")List<String> urls);
+    void deleteSiteByUrls(@Param("urls")List<String> urls);
 
     @Query("SELECT s.id FROM SiteEntity s WHERE s.url IN :urls")
-    List<Integer> findByUrlSiteId(@Param("urls") List<String> urls);
+    List<Integer> findSiteIdByUrl(@Param("urls") List<String> urls);
 
     Optional<SiteEntity> findSiteByUrl(String url);
 
-    SiteEntity findSiteById(Integer id);
+    @Query("SELECT s FROM SiteEntity s WHERE s.url IN :urls")
+    List<SiteEntity> findSiteByUrl(@Param("urls") List<String> urls);
 }

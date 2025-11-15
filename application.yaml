@@ -3,18 +3,14 @@
 indexing:
  settings:
   sites:
-   - url: "http://www.playback.ru/"
-     name: playback
-   - url: "https://ipfran.ru/"
-     name: ipfran
+   - url: "https://lenta.ru/"
+     name: lenta
+   - url: "https://www.sports.ru/"
+     name: sports
  http:
    user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
    referrer: "https://www.google.com"
-   timeout: 1500
-#parser-settings:
-#  agent:
-#    agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-#    referrer: "https://www.google.com"
+   timeout: 3000
 
 server:
   port: 8080
