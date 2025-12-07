@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Connection;
 import org.springframework.context.ApplicationContext;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.Http;
@@ -24,7 +23,9 @@ import searchengine.repository.SiteRepository;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -138,7 +139,7 @@ public class IndexingServiceImpl implements IndexingService {
 
         Connection.Response response = lemmaFinder.getResponse(url);
         String currentHtml = response.body();
-        Integer statusCode = response.statusCode();
+        int statusCode = response.statusCode();
 
         PageEntity pageEntity = new PageEntity();
         pageEntity.setSite(currentSite);
@@ -147,7 +148,7 @@ public class IndexingServiceImpl implements IndexingService {
         pageEntity.setContent(currentHtml);
         pageRepository.save(pageEntity);
 
-        HashMap<String, Float> lemmaOnePage = lemmaFinder.collectLemmas(url, currentHtml);
+        HashMap<String, Float> lemmaOnePage = lemmaFinder.collectLemmas(currentHtml);
         for (var entry : lemmaOnePage.entrySet()) {
             String textLemma = entry.getKey();
             Float rank = entry.getValue();
@@ -276,15 +277,20 @@ public class IndexingServiceImpl implements IndexingService {
         Set<String> visitedUrl = ConcurrentHashMap.newKeySet();
         try {
             checkStopped();
-            Set<PageEntity> pages = forkJoinPool.invoke(new HtmlParser(context, url,
-                    site, pageRepository, siteRepository, indexRepository, lemmaRepository,
-                    lemmaFinder, sitesList, visitedUrl, http));
-            savePagesBatch(pages.stream().toList(), 50);
+            forkJoinPool.invoke(new HtmlParser(context, url, site,
+                    pageRepository, siteRepository, indexRepository,
+                    lemmaRepository, lemmaFinder, sitesList,
+                    visitedUrl, http)
+            );
             site.setStatus(Status.INDEXED);
         } catch (ReadingException | ThreadException e) {
             site.setStatus(Status.FAILED);
             site.setLastError(e.getMessage());
             log.info("Индексация для сайта {} прекратилась, статусом {}", url, site.getStatus());
+        } catch (Exception e) {
+            site.setStatus(Status.FAILED);
+            site.setLastError("Неожиданная ошибка: " + e.getMessage());
+            log.error("Неожиданная ошибка при индексации сайта {} ", url, e);
         } finally {
             site.setStatusTime(LocalDateTime.now());
             siteRepository.save(site);
@@ -294,23 +300,6 @@ public class IndexingServiceImpl implements IndexingService {
     public void checkStopped() {
         if (stopRequested.get() || Thread.currentThread().isInterrupted()) {
             throw new ThreadException("Индексация прервана пользователем");
-        }
-    }
-
-    public void savePagesBatch(List<PageEntity> pageEntities, int batchSize) {
-        List<PageEntity> batchList = new ArrayList<>(pageEntities);
-        int total = batchList.size();
-
-        for (int i = 0; i < total; i += batchSize) {
-            int end = Math.min(i + batchSize, total);
-            List<PageEntity> subList = batchList.subList(i, end);
-            try {
-                pageRepository.saveAll(subList);
-            } catch (DataIntegrityViolationException e) {
-                log.error("Одна или несколько страниц в батче уже сохранены");
-            }
-            pageRepository.flush();
-            checkStopped();
         }
     }
 

@@ -10,7 +10,6 @@ import searchengine.config.Http;
 import searchengine.config.SitesList;
 import searchengine.exceptions.ReadingException;
 import searchengine.exceptions.ThreadException;
-import searchengine.model.PageEntity;
 import searchengine.model.SiteEntity;
 import searchengine.repository.IndexRepository;
 import searchengine.repository.LemmaRepository;
@@ -23,13 +22,11 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.RecursiveTask;
+import java.util.concurrent.RecursiveAction;
 
 @Slf4j
-public class HtmlParser extends RecursiveTask<Set<PageEntity>> {
-
+public class HtmlParser extends RecursiveAction {
     private final ApplicationContext context;
     private final String url;
     private final SiteEntity site;
@@ -41,16 +38,12 @@ public class HtmlParser extends RecursiveTask<Set<PageEntity>> {
     private final SitesList sitesList;
     private final Set<String> visitedUrl;
     private final Http http;
-
     public HtmlParser(ApplicationContext context, String url,
                       SiteEntity site, PageRepository pageRepository,
-                      SiteRepository siteRepository,
-                      IndexRepository indexRepository,
-                      LemmaRepository lemmaRepository,
-                      LemmaFinder lemmaFinder,
+                      SiteRepository siteRepository, IndexRepository indexRepository,
+                      LemmaRepository lemmaRepository, LemmaFinder lemmaFinder,
                       SitesList sitesList,
-                      Set<String> visitedUrl,
-                      Http http) {
+                      Set<String> visitedUrl, Http http) {
         this.context = context;
         this.url = url;
         this.site = site;
@@ -63,7 +56,6 @@ public class HtmlParser extends RecursiveTask<Set<PageEntity>> {
         this.visitedUrl = visitedUrl;
         this.http = http;
     }
-
     public Response getResponse(String url) {
         checkInterrupted();
         try {
@@ -71,36 +63,36 @@ public class HtmlParser extends RecursiveTask<Set<PageEntity>> {
                 throw new ThreadException("Индексация прервана пользователем");
             }
             return Jsoup.connect(url)
-                    .userAgent(http.getUserAgent())
-                    .referrer(http.getReferrer())
+                    .userAgent(http.getUserAgent()) .referrer(http.getReferrer())
                     .timeout(http.getTimeout())
                     .execute();
         } catch (IOException ex) {
             throw new ReadingException("Ошибка загрузки страницы: " + url);
         }
-    }
 
+    }
     @Override
-    protected Set<PageEntity> compute() {
+    protected void compute() {
         IndexingPageService indexingPageService = context.getBean(IndexingPageService.class);
         checkInterrupted();
-        Set<PageEntity> pageEntities = new HashSet<>();
+        System.out.println("Парсим url " + url);
 
         while (!IndexingServiceImpl.stopRequested.get()) {
+
+            System.out.println(visitedUrl.contains(url));
             if (!visitedUrl.add(url)) {
-                return pageEntities;
+                break;
             }
             checkInterrupted();
 
             Response response = getResponse(url);
-            checkInterrupted();
-
             String html = response.body();
             int statusCode = response.statusCode();
-            indexingPageService.indexPage(url, html, statusCode, site);
-            ArrayList<HtmlParser> taskList = new ArrayList<>();
 
+            checkInterrupted();
+            indexingPageService.indexPage(url, html, statusCode, site);
             Elements elements;
+
             try {
                 checkInterrupted();
                 elements = response.parse().select("a[href]");
@@ -108,37 +100,32 @@ public class HtmlParser extends RecursiveTask<Set<PageEntity>> {
                 throw new ReadingException("Не могу прочитать страницу");
             }
 
-            String currentDomain = getDomain(url);
+            ArrayList<HtmlParser> taskList = new ArrayList<>();
+            String currentDomain = getHost(url);
 
             for (Element link : elements) {
                 checkInterrupted();
-                String href = link.attr("href").trim();
 
-                String absUrl = link.absUrl("href");
-                if (absUrl.isEmpty()) continue;
+                String absUrl = link.absUrl("href").trim();
 
-                if (!isInternalLink(absUrl, currentDomain)) continue;
+                if (absUrl.isEmpty() || !isInternalLink(absUrl, currentDomain)) continue;
 
-
-                if (visitedUrl.add(absUrl)) {
-                    PageEntity page = createPage(href, response, html);
-                    pageEntities.add(page);
-                }
-
-                HtmlParser parser = new HtmlParser(context, absUrl, site, pageRepository, siteRepository, indexRepository,
-                        lemmaRepository, lemmaFinder, sitesList, visitedUrl, http);
-                parser.fork();
-                taskList.add(parser);
+                HtmlParser child = new HtmlParser(context, absUrl, site,
+                        pageRepository, siteRepository, indexRepository,
+                        lemmaRepository, lemmaFinder, sitesList,
+                        visitedUrl, http);
+                child.fork();
+                taskList.add(child);
             }
+
             for (HtmlParser task : taskList) {
                 checkInterrupted();
-                pageEntities.addAll(task.join());
+                task.join();
             }
         }
-        return pageEntities;
     }
 
-    private String getDomain(String url) {
+    private String getHost(String url) {
         try {
             return new URL(url).getHost();
         } catch (MalformedURLException e) {
@@ -151,6 +138,7 @@ public class HtmlParser extends RecursiveTask<Set<PageEntity>> {
             URL linkUrl = new URL(absUrl);
             String host = linkUrl.getHost();
             return host.equalsIgnoreCase(currentDomain);
+
         } catch (MalformedURLException e) {
             return false;
         }
@@ -158,17 +146,7 @@ public class HtmlParser extends RecursiveTask<Set<PageEntity>> {
 
     public void checkInterrupted() {
         if (IndexingServiceImpl.stopRequested.get() || Thread.currentThread().isInterrupted()) {
-           throw new ThreadException("Индексация прервана пользователем");
+            throw new ThreadException("Индексация прервана пользователем");
         }
-    }
-
-
-    public PageEntity createPage(String path, Response response, String html) {
-        PageEntity pageEntity = new PageEntity();
-        pageEntity.setPath(path);
-        pageEntity.setCode(response.statusCode());
-        pageEntity.setContent(html);
-        pageEntity.setSite(site);
-        return pageEntity;
     }
 }

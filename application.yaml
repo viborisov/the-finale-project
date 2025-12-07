@@ -3,10 +3,8 @@
 indexing:
  settings:
   sites:
-   - url: "https://lenta.ru/"
-     name: lenta
-   - url: "https://www.sports.ru/"
-     name: sports
+   - url: "https://sendel.ru/"
+     name: sendel
  http:
    user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
    referrer: "https://www.google.com"

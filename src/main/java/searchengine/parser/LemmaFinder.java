@@ -25,7 +25,7 @@ public class LemmaFinder {
     private final String WORD_TYPE_REGEX = "\\W\\w&&[^а-яА-Я\\s]";
     private final String[] particlesNames = {"ПРЕДЛ", "СОЮЗ", "МЕЖД", "ЧАСТ"};
 
-    public HashMap<String, Float> collectLemmas(String url, String html) {
+    public HashMap<String, Float> collectLemmas(String html) {
         String[] words = arrayContainsRussianWords(html);
         HashMap<String, Float> lemmas = new HashMap<>();
 
@@ -73,13 +73,6 @@ public class LemmaFinder {
             }
         }
         return false;
-    }
-
-    private String clearText(String text) {
-        if (text.isEmpty()) {
-            return "";
-        }
-        return Jsoup.parse(text).text();
     }
 
     public Response getResponse(String url) {
