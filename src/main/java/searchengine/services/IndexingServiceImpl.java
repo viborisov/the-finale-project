@@ -10,7 +10,6 @@ import searchengine.config.Http;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.dto.statistics.IndexingResponse;
-import searchengine.exceptions.ReadingException;
 import searchengine.exceptions.ThreadException;
 import searchengine.model.*;
 import searchengine.parser.HtmlParser;
@@ -50,7 +49,6 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public IndexingResponse startIndexing() {
-
         IndexingResponse response = new IndexingResponse();
 
         if (!isIndexing.compareAndSet(false, true)) {
@@ -76,18 +74,22 @@ public class IndexingServiceImpl implements IndexingService {
             try {
                 List<CompletableFuture<Void>> futures = sites.stream()
                         .map(site -> CompletableFuture.runAsync(() -> {
-                            log.info("Началась индексация сайта {}", site.getUrl());
-                            createSite(site.getUrl(), site.getName());
-                            indexingPage(site.getUrl());
+                            try {
+                                log.info("Началась индексация сайта {}", site.getUrl());
+                                createSite(site.getUrl(), site.getName());
+                                indexingPage(site.getUrl());
+                            } catch (Exception e) {
+                                log.error("Ошибка при индексации сайта {}: {}", site.getUrl(), e.getMessage(), e);
+                            }
                         }, executorService))
                                 .toList();
+
                 CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-                log.info("Индексация завершена");
             } catch (Exception e) {
-                e.printStackTrace();
-                log.error("Ошибка во время индексации");
+                log.error("Ошибка во время индексации", e);
             } finally {
                 isIndexing.set(false);
+                log.info("Индексация завершена");
             }
         });
         return response;
@@ -132,6 +134,7 @@ public class IndexingServiceImpl implements IndexingService {
         log.info("индексация и сбор лемм страницы {} началась", url);
         SiteEntity currentSite = findOrCreateSiteByUrl(url);
         PageEntity currentPage = getPageByUrl(url, currentSite);
+
         if (currentPage != null) {
             deletePageInfo(currentPage);
             log.info("Отчистили таблицы lemma, index, page");
@@ -141,9 +144,17 @@ public class IndexingServiceImpl implements IndexingService {
         String currentHtml = response.body();
         int statusCode = response.statusCode();
 
+        String path = getUrl(url).getPath();
+        if (path == null || path.isEmpty()) {
+            path = "/";
+        }
+        if (path.length() > 1 && path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+
         PageEntity pageEntity = new PageEntity();
         pageEntity.setSite(currentSite);
-        pageEntity.setPath(getUrl(url).getPath());
+        pageEntity.setPath(path);
         pageEntity.setCode(statusCode);
         pageEntity.setContent(currentHtml);
         pageRepository.save(pageEntity);
@@ -201,14 +212,20 @@ public class IndexingServiceImpl implements IndexingService {
         pageRepository.delete(page);
     }
 
+    public String extractName(String host) {
+        int startIndex = host.indexOf(".");
+        int lastIndex = host.indexOf(".", startIndex + 1);
+        return host.substring(startIndex + 1, lastIndex);
+    }
+
     public SiteEntity findOrCreateSiteByUrl(String url) {
-        String domain = getUrl(url).getHost();
+        String host = getUrl(url).getHost();
         String protocol = getUrl(url).getProtocol();
-        return siteRepository.findSiteByUrl(protocol + "://" + domain + "/")
+        return siteRepository.findSiteByUrl(protocol + "://" + host + "/")
                 .orElseGet(() -> {
                     SiteEntity site = new SiteEntity();
-                    site.setUrl(protocol + "://" + domain + "/");
-                    site.setName(domain);
+                    site.setUrl(protocol + "://" + host + "/");
+                    site.setName(extractName(host));
                     site.setStatus(Status.INDEXED);
                     site.setLastError("");
                     site.setStatusTime(LocalDateTime.now());
@@ -259,6 +276,12 @@ public class IndexingServiceImpl implements IndexingService {
 
     public PageEntity getPageByUrl(String url,SiteEntity site) {
         String path = getUrl(url).getPath();
+        if (path == null || path.isEmpty()) {
+            path = "/";
+        }
+        if (path.length() > 1 && path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
         return pageRepository.findPageByPathAndSite(path, site);
     }
 
@@ -273,7 +296,7 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     public void indexingPage(String url) {
-        SiteEntity site = siteRepository.findSiteByUrl(url).get();
+        SiteEntity site = siteRepository.findSiteByUrl(url).orElseThrow(() -> new IllegalStateException("Сайт не найден в БД: " + url));
         Set<String> visitedUrl = ConcurrentHashMap.newKeySet();
         try {
             checkStopped();
@@ -283,14 +306,18 @@ public class IndexingServiceImpl implements IndexingService {
                     visitedUrl, http)
             );
             site.setStatus(Status.INDEXED);
-        } catch (ReadingException | ThreadException e) {
+            site.setLastError("");
+
+        } catch (ThreadException e) {
             site.setStatus(Status.FAILED);
             site.setLastError(e.getMessage());
-            log.info("Индексация для сайта {} прекратилась, статусом {}", url, site.getStatus());
+            log.info("Индексация для сайта {} прервана пользователем", url);
+
         } catch (Exception e) {
             site.setStatus(Status.FAILED);
             site.setLastError("Неожиданная ошибка: " + e.getMessage());
             log.error("Неожиданная ошибка при индексации сайта {} ", url, e);
+
         } finally {
             site.setStatusTime(LocalDateTime.now());
             siteRepository.save(site);

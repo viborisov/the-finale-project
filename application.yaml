@@ -3,6 +3,8 @@
 indexing:
  settings:
   sites:
+   - url: "http://www.playback.ru/"
+     name: playback
    - url: "https://sendel.ru/"
      name: sendel
  http:

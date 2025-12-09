@@ -74,54 +74,85 @@ public class HtmlParser extends RecursiveAction {
     @Override
     protected void compute() {
         IndexingPageService indexingPageService = context.getBean(IndexingPageService.class);
-        checkInterrupted();
-        System.out.println("Парсим url " + url);
-
-        while (!IndexingServiceImpl.stopRequested.get()) {
-
-            System.out.println(visitedUrl.contains(url));
-            if (!visitedUrl.add(url)) {
-                break;
-            }
+        try {
             checkInterrupted();
+            while (!IndexingServiceImpl.stopRequested.get()) {
 
-            Response response = getResponse(url);
-            String html = response.body();
-            int statusCode = response.statusCode();
-
-            checkInterrupted();
-            indexingPageService.indexPage(url, html, statusCode, site);
-            Elements elements;
-
-            try {
-                checkInterrupted();
-                elements = response.parse().select("a[href]");
-            } catch (IOException e) {
-                throw new ReadingException("Не могу прочитать страницу");
-            }
-
-            ArrayList<HtmlParser> taskList = new ArrayList<>();
-            String currentDomain = getHost(url);
-
-            for (Element link : elements) {
+                String pageKey = getNormalizedPath(url);
+                if (!visitedUrl.add(pageKey)) {
+                    break;
+                }
                 checkInterrupted();
 
-                String absUrl = link.absUrl("href").trim();
+                Response response = getResponse(url);
+                String html = response.body();
+                int statusCode = response.statusCode();
 
-                if (absUrl.isEmpty() || !isInternalLink(absUrl, currentDomain)) continue;
-
-                HtmlParser child = new HtmlParser(context, absUrl, site,
-                        pageRepository, siteRepository, indexRepository,
-                        lemmaRepository, lemmaFinder, sitesList,
-                        visitedUrl, http);
-                child.fork();
-                taskList.add(child);
-            }
-
-            for (HtmlParser task : taskList) {
                 checkInterrupted();
-                task.join();
+                synchronized (IndexingPageService.LEMMA_LOCK) {
+                    indexingPageService.indexPage(url, html, statusCode, site);
+                }
+                Elements elements;
+
+                try {
+                    checkInterrupted();
+                    elements = response.parse().select("a[href]");
+                } catch (IOException e) {
+                    log.warn("Не могу прочитать страницу {}: {}", url, e.getMessage());
+                    return;
+                }
+
+                ArrayList<HtmlParser> taskList = new ArrayList<>();
+                String currentDomain = getHost(url);
+
+                for (Element link : elements) {
+                    checkInterrupted();
+
+                    String absUrl = link.absUrl("href").trim();
+
+                    if (absUrl.isEmpty() || !isInternalLink(absUrl, currentDomain)) continue;
+                    String childKey = getNormalizedPath(absUrl);
+
+                    if (visitedUrl.contains(childKey)) {
+                        continue;
+                    }
+
+                    HtmlParser child = new HtmlParser(context, absUrl, site,
+                            pageRepository, siteRepository, indexRepository,
+                            lemmaRepository, lemmaFinder, sitesList,
+                            visitedUrl, http);
+                    child.fork();
+                    taskList.add(child);
+                }
+
+                for (HtmlParser task : taskList) {
+                    checkInterrupted();
+                    task.join();
+                }
             }
+        } catch (ThreadException e) {
+            throw e;
+        } catch (ReadingException e) {
+            log.warn("Ошибка загрузки страницы {}: {}", url, e.getMessage());
+        } catch (Exception e) {
+            log.error("Неожиданная ошибка при обработке страницы {}: {}", url, e.getMessage(), e);
+        }
+    }
+
+    private String getNormalizedPath(String url) {
+        try {
+            URL u = new URL(url);
+            String path = u.getPath();
+
+            if (path == null || path.isEmpty()) {
+                path = "/";
+            }
+            if (path.length() > 1 && path.endsWith("/")) {
+                path = path.substring(0, path.length() - 1);
+            }
+            return path;
+        } catch (MalformedURLException e) {
+            throw new ReadingException("Не валидный URL: " + url);
         }
     }
 

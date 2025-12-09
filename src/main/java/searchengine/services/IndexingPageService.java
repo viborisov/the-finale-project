@@ -21,6 +21,8 @@ import java.util.HashMap;
 @Service
 @RequiredArgsConstructor
 public class IndexingPageService {
+    public static final Object LEMMA_LOCK = new Object();
+
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
     private final PageRepository pageRepository;
@@ -30,9 +32,17 @@ public class IndexingPageService {
     public void indexPage(String url, String html, int statusCode, SiteEntity site) {
         log.info("индексация и сбор лемм страницы {} началась", url);
 
+        String path = getUrl(url).getPath();
+        if (path == null || path.isEmpty()) {
+            path = "/";
+        }
+        if (path.length() > 1 && path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+
         PageEntity pageEntity = new PageEntity();
         pageEntity.setSite(site);
-        pageEntity.setPath(getUrl(url).getPath());
+        pageEntity.setPath(path);
         pageEntity.setCode(statusCode);
         pageEntity.setContent(html);
         pageRepository.save(pageEntity);
