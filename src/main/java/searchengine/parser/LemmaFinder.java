@@ -77,10 +77,17 @@ public class LemmaFinder {
 
     public Response getResponse(String url) {
         try {
-            return  Jsoup.connect(url)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    .referrer("https://www.google.com")
-                    .execute();
+            if (url.startsWith("http")) {
+                return  Jsoup.connect(url)
+                        .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                        .referrer("https://www.google.com")
+                        .execute();
+            } else {
+                return  Jsoup.connect("https://" + url)
+                        .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                        .referrer("https://www.google.com")
+                        .execute();
+            }
         } catch (IOException e) {
             throw new ReadingException("Не удалось прочитать страницу");
         }

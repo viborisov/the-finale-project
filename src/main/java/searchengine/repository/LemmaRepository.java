@@ -20,4 +20,7 @@ public interface LemmaRepository extends JpaRepository<LemmaEntity, Integer> {
 
     @Query(value = "SELECT COUNT(*) FROM lemmas WHERE site_id = :id", nativeQuery = true)
     Long findLemmasBySiteId(@Param("id") Integer id);
+
+    @Query(value = "SELECT * FROM lemmas WHERE lemma = :lemma ORDER BY frequency DESC LIMIT 1", nativeQuery = true)
+    LemmaEntity findLemmaByLemma(@Param("lemma") String lemma);
 }

@@ -213,9 +213,16 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     public String extractName(String host) {
-        int startIndex = host.indexOf(".");
-        int lastIndex = host.indexOf(".", startIndex + 1);
-        return host.substring(startIndex + 1, lastIndex);
+        if (host.startsWith("www.")) {
+            int startIndex = host.indexOf(".");
+            int lastIndex = host.indexOf(".", startIndex + 1);
+            return host.substring(startIndex + 1, lastIndex);
+        } else {
+            String newHost = "www." + host;
+            int startIndex = newHost.indexOf(".");
+            int lastIndex = newHost.indexOf(".", startIndex + 1);
+            return newHost.substring(startIndex + 1, lastIndex);
+        }
     }
 
     public SiteEntity findOrCreateSiteByUrl(String url) {
@@ -259,9 +266,15 @@ public class IndexingServiceImpl implements IndexingService {
     public URL getUrl(String url) {
         URL currentUrl = null;
         try {
-            currentUrl = new URL(url);
+            if (url.startsWith("http")) {
+                currentUrl = new URL(url);
+            } else {
+                String newUrl = "https://" + url;
+                currentUrl = new URL(newUrl);
+            }
+
         } catch (MalformedURLException e) {
-            System.err.println("Некорректный URL: " + e.getMessage());
+            log.warn("Некорректный URL: " + e.getMessage());
         }
         return currentUrl;
     }

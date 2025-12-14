@@ -20,4 +20,6 @@ public interface PageRepository extends JpaRepository<PageEntity, Integer> {
 
     @Query(value = "SELECT COUNT(*) FROM pages WHERE site_id = :id", nativeQuery = true)
     Long findPagesById(@Param("id") Integer id);
+
+    Long countBySite(SiteEntity site);
 }
