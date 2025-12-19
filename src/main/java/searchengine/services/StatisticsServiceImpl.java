@@ -11,8 +11,8 @@ import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,21 +38,22 @@ public class StatisticsServiceImpl implements StatisticsService {
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
         List<SiteEntity> sitesList = siteRepository.findAll();
 
-        for(int i = 0; i < sitesList.size(); i++) {
-            SiteEntity site = sitesList.get(i);
+        for (SiteEntity site : sitesList) {
             DetailedStatisticsItem item = new DetailedStatisticsItem();
             item.setName(site.getName());
             item.setUrl(site.getUrl());
 
-            int pages = pageRepository.findPagesById(i + 1).intValue();
-            int lemmas = lemmaRepository.findLemmasBySiteId(i + 1).intValue();
+            int pages = pageRepository.findPagesById(site.getId()).intValue();
+            int lemmas = lemmaRepository.findLemmasBySiteId(site.getId()).intValue();
 
             item.setPages(pages);
             item.setLemmas(lemmas);
-            item.setStatus(sitesList.get(i).getStatus().toString());
-            item.setError(sitesList.get(i).getLastError());
-            LocalDateTime now = LocalDateTime.now();
-            item.setStatusTime(Duration.between(sitesList.get(i).getStatusTime(), now).toMillis());
+            item.setStatus(site.getStatus().toString());
+            item.setError(site.getLastError());
+            LocalDateTime localDateTime = site.getStatusTime();
+            ZoneId zoneId = ZoneId.of("Europe/Moscow");
+            long millis = localDateTime.atZone(zoneId).toInstant().toEpochMilli();
+            item.setStatusTime(millis);
 
             total.setPages((int) pageRepository.count());
             total.setLemmas((int) lemmaRepository.count());

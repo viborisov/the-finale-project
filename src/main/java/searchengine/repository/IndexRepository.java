@@ -21,6 +21,6 @@ public interface IndexRepository extends JpaRepository<IndexEntity, Integer> {
 
     List<LemmaEntity> findLemmasByPage(PageEntity page);
 
-    @Query("SELECT COUNT(rank) FROM IndexEntity i WHERE i.page = :page")
+    @Query("SELECT SUM(i.rank) FROM IndexEntity i WHERE i.page = :page")
     Float findSumAllFrequenciesByPage(@Param("page") PageEntity page);
 }

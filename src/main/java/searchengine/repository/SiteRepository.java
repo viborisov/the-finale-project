@@ -26,4 +26,5 @@ public interface SiteRepository extends JpaRepository<SiteEntity, Integer> {
     @Query("SELECT s FROM SiteEntity s WHERE s.url IN :urls")
     List<SiteEntity> findSiteByUrl(@Param("urls") List<String> urls);
 
+    SiteEntity findSiteById(int id);
 }

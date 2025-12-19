@@ -228,10 +228,10 @@ public class IndexingServiceImpl implements IndexingService {
     public SiteEntity findOrCreateSiteByUrl(String url) {
         String host = getUrl(url).getHost();
         String protocol = getUrl(url).getProtocol();
-        return siteRepository.findSiteByUrl(protocol + "://" + host + "/")
+        return siteRepository.findSiteByUrl(protocol + "://" + host)
                 .orElseGet(() -> {
                     SiteEntity site = new SiteEntity();
-                    site.setUrl(protocol + "://" + host + "/");
+                    site.setUrl(protocol + "://" + host);
                     site.setName(extractName(host));
                     site.setStatus(Status.INDEXED);
                     site.setLastError("");

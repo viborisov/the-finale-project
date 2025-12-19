@@ -3,9 +3,9 @@
 indexing:
  settings:
   sites:
-   - url: "http://www.playback.ru/"
+   - url: "http://www.playback.ru"
      name: playback
-   - url: "https://sendel.ru/"
+   - url: "https://sendel.ru"
      name: sendel
  http:
    user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -24,7 +24,7 @@ spring:
     url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: update
     show-sql: true
     properties:
       hibernate:

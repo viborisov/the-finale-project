@@ -112,7 +112,6 @@ public class HtmlParser extends RecursiveAction {
 
                     if (absUrl.isEmpty() || !isInternalLink(absUrl, currentDomain)) continue;
                     String childKey = getNormalizedPath(absUrl);
-
                     if (visitedUrl.contains(childKey)) {
                         continue;
                     }

@@ -22,4 +22,6 @@ public interface PageRepository extends JpaRepository<PageEntity, Integer> {
     Long findPagesById(@Param("id") Integer id);
 
     Long countBySite(SiteEntity site);
+
+
 }
